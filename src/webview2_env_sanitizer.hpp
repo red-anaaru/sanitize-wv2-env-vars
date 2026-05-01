@@ -1,14 +1,28 @@
 // webview2_env_sanitizer.hpp
 //
-// Cross-platform helper that neutralizes WebView2-related environment variables
-// at process startup, before any WebView2 (Win32) / MSWebView2 (macOS) instance
+// Cross-platform helper that neutralizes WebView2-related injection vectors at
+// process startup, before any WebView2 (Win32) / MSWebView2 (macOS) instance
 // is created.
 //
-// Why: The WebView2 runtime *appends* the contents of WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS
-// (and honors several other WEBVIEW2_* env vars) to the arguments your app passes to
-// CreateCoreWebView2EnvironmentWithOptions. A local, non-admin attacker can therefore
-// turn on the Chrome DevTools Protocol (e.g. `--remote-debugging-port=9222`) on *your*
-// WebView2 instance and proceed to read cookies (incl. httpOnly), execute arbitrary JS
+// Two parallel attack channels are covered on Windows:
+//
+//   1. Environment variables. The WebView2 runtime *appends* the contents of
+//      WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS (and honors several other
+//      WEBVIEW2_* env vars) to the arguments your app passes to
+//      CreateCoreWebView2EnvironmentWithOptions.
+//
+//   2. Per-app policy registry overrides. If the env var is absent, the runtime
+//      falls through to:
+//        HKCU\Software\Policies\Microsoft\Edge\WebView2\AdditionalBrowserArguments\<AppId>
+//        HKLM\Software\Policies\Microsoft\Edge\WebView2\AdditionalBrowserArguments\<AppId>
+//      where <AppId> is the exe leaf name or "*". HKCU is user-writable, so a
+//      non-admin attacker can persist there too. Closing only one path is
+//      incomplete coverage: the runtime falls through to the other when the
+//      first is absent.
+//
+// A local, non-admin attacker exploiting either channel can turn on the Chrome
+// DevTools Protocol (e.g. `--remote-debugging-port=9222`) on *your* WebView2
+// instance and proceed to read cookies (incl. httpOnly), execute arbitrary JS
 // in your app's origin, and steal session tokens.
 //
 // Microsoft's own guidance:
@@ -47,6 +61,8 @@ inline constexpr uint32_t kOtherUnknown     = 1u << 5;  // non-empty but matched
 }  // namespace fingerprint
 
 struct SanitizeResult {
+    // ----- Environment-variable findings -----
+
     // Names of WEBVIEW2_* env vars that were found set (and cleared).
     std::vector<std::string> detected_vars;
 
@@ -63,15 +79,56 @@ struct SanitizeResult {
     // Names of env vars that were detected but for which the clear call failed.
     std::vector<std::string> failed_vars;
 
-    bool any_detected() const noexcept { return !detected_vars.empty(); }
+    // ----- Registry policy override findings (Windows only) -----
+    //
+    // The WebView2 runtime also reads per-app override values from:
+    //   HKCU\Software\Policies\Microsoft\Edge\WebView2\AdditionalBrowserArguments\<AppId>
+    //   HKLM\Software\Policies\Microsoft\Edge\WebView2\AdditionalBrowserArguments\<AppId>
+    // where <AppId> is the exe leaf name (e.g. "ms-teams.exe") or "*" (wildcard).
+    // HKCU is user-writable, so a non-admin attacker can persist there. The
+    // runtime falls through to the registry when env vars are absent — meaning
+    // env-var-only sanitization leaves a parallel attack channel open.
+    //
+    // Behavior:
+    //   - HKCU + HKLM are *both* read and logged (forensic signal).
+    //   - HKCU values whose fingerprint includes attack tokens
+    //     (kRemoteDebugging | kLoadExtension | kNoSandbox | kDisableWebSec)
+    //     are *deleted*. We do not blindly delete every HKCU policy entry: a
+    //     legitimate `--user-data-dir` set by a developer should not be wiped.
+    //   - HKLM is never written. Modifying machine-wide policy requires admin,
+    //     and an admin attacker is already out of scope; the value is captured
+    //     for telemetry only.
+    //
+    // The four vectors below are 1:1 (same length, same order) — one entry per
+    // detected policy value across both hives.
+    std::vector<std::string> detected_policy_hives;        // "HKCU" | "HKLM"
+    std::vector<std::string> detected_policy_value_names;  // exe leaf, e.g. "ms-teams.exe", or "*"
+    std::vector<uint32_t>    detected_policy_fingerprints; // see fingerprint:: above
+
+    // Subset of HKCU policy values that were actively deleted (attack-token match).
+    // Format: "HKCU:<value-name>".
+    std::vector<std::string> policy_keys_cleared;
+
+    // HKCU policy values for which deletion was attempted and failed (rare).
+    // Format: "HKCU:<value-name>".
+    std::vector<std::string> policy_keys_failed;
+
+    bool any_detected() const noexcept {
+        return !detected_vars.empty() || !detected_policy_hives.empty();
+    }
 };
 
 // Returns a bitmask describing which suspicious tokens appear in `value`.
 // Pure function, no side effects, safe to call from anywhere.
 [[nodiscard]] uint32_t BuildValueFingerprint(std::string_view value) noexcept;
 
-// Clears every WEBVIEW2_* environment variable that the WebView2 runtime honors,
-// returning a record of what was found.
+// Performs both layers of WebView2 startup hardening:
+//   - clears every WEBVIEW2_* environment variable that the runtime honors;
+//   - on Windows, additionally inspects (and selectively deletes) the per-app
+//     override values under
+//       {HKCU,HKLM}\Software\Policies\Microsoft\Edge\WebView2\AdditionalBrowserArguments,
+//     which the runtime falls through to when env vars are absent.
+// Returns a record of everything found across both vectors.
 //
 // MUST be called before any of the following:
 //   - CreateCoreWebView2Environment / CreateCoreWebView2EnvironmentWithOptions (Win32)
