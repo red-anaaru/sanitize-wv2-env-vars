@@ -16,17 +16,14 @@ namespace webview2_security {
 
 namespace {
 
-// Kept aligned with the Windows list. Vars that don't apply on macOS are simply
-// absent from getenv() and skipped — the cost of an extra lookup is negligible
-// and keeping the lists in sync avoids "we forgot to add it on macOS too" bugs.
-constexpr std::array<const char*, 7> kDangerousEnvVars = {
+// Subset that the macOS MSWebView2 preview SDK actually honors. The script-debugger
+// and channel-selection vars are Windows-specific (script debugger uses a Windows
+// named pipe; the channel concept applies to the WebView2 Runtime distribution on
+// Windows), so clearing them on macOS would just be busywork.
+constexpr std::array<const char*, 3> kDangerousEnvVars = {
     "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS",
     "WEBVIEW2_BROWSER_EXECUTABLE_FOLDER",
     "WEBVIEW2_USER_DATA_FOLDER",
-    "WEBVIEW2_PIPE_FOR_SCRIPT_DEBUGGER",
-    "WEBVIEW2_WAIT_FOR_SCRIPT_DEBUGGER",
-    "WEBVIEW2_CHANNEL_SEARCH_KIND",
-    "WEBVIEW2_RELEASE_CHANNELS",
 };
 
 }  // namespace

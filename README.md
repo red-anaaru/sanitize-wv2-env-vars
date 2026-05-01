@@ -114,7 +114,7 @@ The sample under [`webview2-env-sanitizer-sample/`](./webview2-env-sanitizer-sam
 | `webview2_env_sanitizer.hpp` | Public API + value-fingerprint constants |
 | `webview2_env_sanitizer.cpp` | Platform-agnostic helpers |
 | `webview2_env_sanitizer_win.cpp` | Windows: clears all 7 env vars, detects HKCU vs HKLM vs process-only origin |
-| `webview2_env_sanitizer_mac.mm` | macOS: clears the same 7 names via `unsetenv` (vars that don't apply are absent from `getenv` and skipped) |
+| `webview2_env_sanitizer_mac.mm` | macOS: clears the 3 vars the MSWebView2 preview honors (the Windows-only script-debugger and channel-selection vars don't apply) via `unsetenv` |
 | `main_example.cpp` | Where to call it |
 | `CMakeLists.txt` | Builds it |
 
