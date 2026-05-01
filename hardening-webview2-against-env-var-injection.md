@@ -113,12 +113,10 @@ The sample under [`webview2-env-sanitizer-sample/`](./webview2-env-sanitizer-sam
 |---|---|
 | `webview2_env_sanitizer.hpp` | Public API + value-fingerprint constants |
 | `webview2_env_sanitizer.cpp` | Platform-agnostic helpers |
-| `webview2_env_sanitizer_win.cpp` | Windows: clears env vars, detects HKCU vs HKLM vs process-only origin |
-| `webview2_env_sanitizer_mac.mm` | macOS: clears env vars via `unsetenv` |
+| `webview2_env_sanitizer_win.cpp` | Windows: clears all 7 env vars, detects HKCU vs HKLM vs process-only origin |
+| `webview2_env_sanitizer_mac.mm` | macOS: clears the same 7 names via `unsetenv` (vars that don't apply are absent from `getenv` and skipped) |
 | `main_example.cpp` | Where to call it |
 | `CMakeLists.txt` | Builds it |
-
-> **Note on coverage:** the current sample's `kDangerousEnvVars` array clears 5 of the 7 documented vars on Windows (it omits `WEBVIEW2_CHANNEL_SEARCH_KIND` and `WEBVIEW2_RELEASE_CHANNELS`) and 3 on macOS. Add the missing names to the arrays for full coverage; they're listed in the table above.
 
 #### Public API
 

@@ -23,6 +23,8 @@ constexpr std::array<const wchar_t*, 7> kDangerousEnvVars = {
     L"WEBVIEW2_USER_DATA_FOLDER",              // Redirect profile / cookies
     L"WEBVIEW2_PIPE_FOR_SCRIPT_DEBUGGER",      // Script debugger hook
     L"WEBVIEW2_WAIT_FOR_SCRIPT_DEBUGGER",      // Script debugger hook
+    L"WEBVIEW2_CHANNEL_SEARCH_KIND",           // Channel-selection override (downgrade vector)
+    L"WEBVIEW2_RELEASE_CHANNELS",              // Channel-selection override (downgrade vector)
 };
 
 std::string Utf16ToUtf8(const std::wstring& w) {
